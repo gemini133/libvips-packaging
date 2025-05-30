@@ -80,26 +80,3 @@ if ! [ -x "$(command -v docker)" ]; then
   echo "Please install docker"
   exit 1
 fi
-
-# Update base images
-for baseimage in alpine:3.15 amazonlinux:2 debian:bullseye; do
-  docker pull $baseimage
-done
-
-# Windows (x64, x86 and arm64)
-for flavour in win-x64 win-x64.net452 win-x86 win-x86.net452 win-arm64; do
-  if [ $PLATFORM = "all" ] || [ $PLATFORM = $flavour ]; then
-    echo "Building $flavour..."
-    docker build -t vips-dev-win32 platforms/win32
-    docker run --rm -e "VERSION_VIPS=$VERSION_VIPS" -e "PLATFORM=$flavour" -v $PWD:/packaging vips-dev-win32 sh -c "/packaging/build/win.sh"
-  fi
-done
-
-# Linux (x64, ARMv7 and ARM64v8)
-for flavour in linux-x64 linux-arm linux-arm64 linux-musl-x64 linux-musl-arm64; do
-  if [ $PLATFORM = "all" ] || [ $PLATFORM = $flavour ]; then
-    echo "Building $flavour..."
-    docker build --cache-from vips-dev-$flavour --build-arg BUILDKIT_INLINE_CACHE=1 -t vips-dev-$flavour platforms/$flavour
-    docker run --rm -e "VERSION_VIPS=$VERSION_VIPS" -e VERSION_LATEST_REQUIRED -v $PWD:/packaging vips-dev-$flavour sh -c "/packaging/build/lin.sh"
-  fi
-done
