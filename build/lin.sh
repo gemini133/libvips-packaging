@@ -21,8 +21,8 @@ case ${PLATFORM} in
     ;;
 esac
 
-mkdir ${DEPS}
-mkdir ${TARGET}
+mkdir -p ${DEPS}
+mkdir -p ${TARGET}
 
 # Default optimisation level is for binary size (-Os)
 # Overriden to performance (-O3) for select dependencies that benefit
@@ -101,31 +101,26 @@ CURL="curl --silent --location --retry 3 --retry-max-time 30"
 # Dependency version numbers
 VERSION_ZLIB_NG=2.2.4
 VERSION_FFI=3.4.7
-VERSION_GLIB=2.84.0
+VERSION_GLIB=2.85.0
 VERSION_XML2=2.13.6
 VERSION_EXIF=0.6.25
 VERSION_LCMS2=2.17
-VERSION_MOZJPEG=4.1.5
 VERSION_PNG16=1.6.47
 VERSION_SPNG=0.7.4
 VERSION_IMAGEQUANT=2.4.1
 VERSION_WEBP=1.5.0
-VERSION_TIFF=4.7.0
 VERSION_HWY=1.2.0
 VERSION_PROXY_LIBINTL=0.4
 VERSION_FREETYPE=2.13.3
 VERSION_EXPAT=2.6.4
-VERSION_ARCHIVE=3.7.7
 VERSION_FONTCONFIG=2.16.0
 VERSION_HARFBUZZ=10.4.0
 VERSION_PIXMAN=0.44.2
 VERSION_CAIRO=1.18.4
 VERSION_FRIBIDI=1.0.16
 VERSION_PANGO=1.56.2
-VERSION_RSVG=2.59.91
-VERSION_AOM=3.12.0
-VERSION_HEIF=1.19.7
-VERSION_CGIF=0.5.0
+VERSION_RESVG=0.45.1
+VERSION_PDFIUM=7212
 
 # Remove patch version component
 without_patch() {
@@ -136,66 +131,7 @@ without_prerelease() {
   echo "${1%-[[:alnum:]]*}"
 }
 
-# Check for newer versions
-# Skip by setting the VERSION_LATEST_REQUIRED environment variable to "false"
-ALL_AT_VERSION_LATEST=true
-version_latest() {
-  if [ "$VERSION_LATEST_REQUIRED" == "false" ]; then
-    echo "Skipping latest version check for $1"
-    return
-  fi
-  VERSION_SELECTOR="stable_versions"
-  if [[ "$4" == *"unstable"* ]]; then
-    VERSION_SELECTOR="versions"
-  fi
-  if [[ "$3" == *"/"* ]]; then
-    VERSION_LATEST=$(git -c 'versionsort.suffix=-' ls-remote --tags --refs --sort='v:refname' https://github.com/$3.git | awk -F'/' 'END{print $3}' | tr -d 'v')
-  else
-    VERSION_LATEST=$($CURL "https://release-monitoring.org/api/v2/versions/?project_id=$3" | jq -j ".$VERSION_SELECTOR[0]" | tr '_' '.')
-  fi
-  if [ "$VERSION_LATEST" != "$2" ]; then
-    ALL_AT_VERSION_LATEST=false
-    echo "$1 version $2 has been superseded by $VERSION_LATEST"
-  fi
-}
-version_latest "zlib-ng" "$VERSION_ZLIB_NG" "115592"
-version_latest "ffi" "$VERSION_FFI" "1611"
-version_latest "glib" "$VERSION_GLIB" "10024" "unstable"
-version_latest "xml2" "$VERSION_XML2" "1783"
-version_latest "exif" "$VERSION_EXIF" "1607"
-version_latest "lcms2" "$VERSION_LCMS2" "9815"
-version_latest "mozjpeg" "$VERSION_MOZJPEG" "mozilla/mozjpeg"
-version_latest "png" "$VERSION_PNG16" "1705"
-version_latest "spng" "$VERSION_SPNG" "24289"
-version_latest "webp" "$VERSION_WEBP" "1761"
-version_latest "tiff" "$VERSION_TIFF" "1738"
-version_latest "highway" "$VERSION_HWY" "205809"
-version_latest "proxy-libintl" "$VERSION_PROXY_LIBINTL" "frida/proxy-libintl"
-version_latest "freetype" "$VERSION_FREETYPE" "854"
-version_latest "expat" "$VERSION_EXPAT" "770"
-version_latest "archive" "$VERSION_ARCHIVE" "1558"
-version_latest "fontconfig" "$VERSION_FONTCONFIG" "827"
-version_latest "harfbuzz" "$VERSION_HARFBUZZ" "1299"
-version_latest "pixman" "$VERSION_PIXMAN" "3648"
-version_latest "cairo" "$VERSION_CAIRO" "247"
-version_latest "fribidi" "$VERSION_FRIBIDI" "857"
-version_latest "pango" "$VERSION_PANGO" "11783" "unstable"
-version_latest "rsvg" "$VERSION_RSVG" "5420" "unstable"
-version_latest "aom" "$VERSION_AOM" "17628"
-version_latest "heif" "$VERSION_HEIF" "64439"
-version_latest "cgif" "$VERSION_CGIF" "dloebl/cgif"
-if [ "$ALL_AT_VERSION_LATEST" = "false" ]; then exit 1; fi
-
 # Download and build dependencies from source
-
-if [ "$DARWIN" = true ]; then
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --no-modify-path --profile minimal
-  if [ "$DARWIN_ARM" = true ]; then
-    ${CARGO_HOME}/bin/rustup target add aarch64-apple-darwin
-  fi
-  CFLAGS= cargo install cargo-c --locked
-fi
 
 if [ "${PLATFORM%-*}" == "linux-musl" ] || [ "$DARWIN" = true ]; then
   # musl and macOS requires the standalone intl support library of gettext, since it's not provided by libc (like GNU).
@@ -206,6 +142,76 @@ if [ "${PLATFORM%-*}" == "linux-musl" ] || [ "$DARWIN" = true ]; then
   meson setup _build --default-library=static --buildtype=release --strip --prefix=${TARGET} ${MESON}
   meson install -C _build --tag devel
 fi
+
+sudo chown -R runner:admin /usr/local/share/
+
+mkdir -p ${DEPS}/hwy
+$CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
+
+mkdir -p ${DEPS}/libjxl
+cd ${DEPS}/libjxl
+git clone https://github.com/libjxl/libjxl.git --recursive .
+rm -fr third_party/highway
+cp -r ${DEPS}/hwy third_party/highway
+sed -i'.bak' 's@ AND NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN@@g' lib/jpegli.cmake
+sed -i'.bak' "/set_property(TARGET jpeg APPEND_STRING PROPERTY/{N;d;}" lib/jpegli.cmake
+CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -B_build -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DBUILD_SHARED_LIBS=0 -DJPEGXL_ENABLE_JPEGLI=1 -DCMAKE_BUILD_TYPE=Release  -DJPEGXL_ENABLE_FUZZERS=0 -DJPEGXL_ENABLE_DEVTOOLS=0 -DJPEGXL_ENABLE_TOOLS=0 -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=1 -DJPEGXL_ENABLE_DOXYGEN=0 -DJPEGXL_ENABLE_MANPAGES=0 -DJPEGXL_ENABLE_BENCHMARK=0 -DJPEGXL_BUNDLE_LIBPNG=0 -DJPEGXL_ENABLE_JNI=0 -DJPEGXL_ENABLE_SJPEG=0 -DJPEGXL_ENABLE_OPENEXR=0 -DJPEGXL_ENABLE_SKCMS=1 -DJPEGXL_ENABLE_TCMALLOC=0 -DJPEGXL_ENABLE_COVERAGE=0 -DJPEGXL_ENABLE_WASM_THREADS=0 -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX=target/
+make -C _build
+#combine libjpeg_wrapper.o into libjpegli-static.a
+ar rcs _build/lib/libjpegli-static.a _build/lib/CMakeFiles/jpegli-libjpeg-obj.dir/jpegli/libjpeg_wrapper.cc.o
+mkdir -p ${TARGET}/lib/
+cp _build/lib/libjpegli-static.a ${TARGET}/lib/libjpeg.a
+mkdir -p ${TARGET}/include/
+cp _build/lib/include/jpegli/*h ${TARGET}/include/
+cp third_party/libjpeg-turbo/jerror.h ${TARGET}/include/
+mkdir -p ${TARGET}/lib/pkgconfig/
+cat > ${TARGET}/lib/pkgconfig/libjpeg.pc << EOF
+prefix=${TARGET}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+Name: libjpeg
+Description: libjpeg
+Version: 1.0
+Requires:
+Libs: -L\${libdir} -ljpeg
+Cflags: -I\${includedir}
+EOF
+
+cd ${DEPS}/hwy
+CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
+  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DHWY_ENABLE_CONTRIB=0 -DHWY_ENABLE_EXAMPLES=0 -DHWY_ENABLE_TESTS=0
+make install/strip
+
+mkdir -p ${DEPS}/resvg
+curl -Ls https://github.com/linebender/resvg/releases/download/v$VERSION_RESVG/resvg-$VERSION_RESVG.tar.xz | tar xJC ${DEPS}/resvg --strip-components=1
+cd ${DEPS}/resvg
+# We don't want to build the shared library
+sed -i'.bak' '/^crate-type =/s/"cdylib", //' crates/c-api/Cargo.toml
+cargo build --manifest-path=crates/c-api/Cargo.toml --release --target aarch64-apple-darwin
+ls -la target/release/
+ls -la target/aarch64-apple-darwin/release/
+cp target/aarch64-apple-darwin/release/libresvg* ${TARGET}/lib/
+cp crates/c-api/resvg.h ${TARGET}/include/
+
+mkdir ${DEPS}/pdfium
+$CURL https://github.com/gemini133/pdfium-lib/releases/download/${VERSION_PDFIUM}/macos.tgz | tar xzC ${TARGET} --strip-components 1
+mkdir -p ${TARGET}/lib/pkgconfig
+ls -la ${TARGET} ${TARGET}/lib ${TARGET}/include ${TARGET}/lib/pkgconfig
+cat > ${TARGET}/lib/pkgconfig/pdfium.pc << EOF
+prefix=${TARGET}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+Name: pdfium
+Description: pdfium
+Version: ${VERSION_PDFIUM}
+Requires:
+Libs: -L\${libdir} -lpdfium
+Cflags: -I\${includedir}
+EOF
+
 
 mkdir ${DEPS}/zlib-ng
 $CURL https://github.com/zlib-ng/zlib-ng/archive/${VERSION_ZLIB_NG}.tar.gz | tar xzC ${DEPS}/zlib-ng --strip-components=1
@@ -232,6 +238,7 @@ meson setup _build --default-library=static --buildtype=release --strip --prefix
 # bin-devel is needed for glib-compile-resources
 meson install -C _build --tag bin-devel,devel
 
+
 mkdir ${DEPS}/xml2
 $CURL https://download.gnome.org/sources/libxml2/$(without_patch $VERSION_XML2)/libxml2-${VERSION_XML2}.tar.xz | tar xJC ${DEPS}/xml2 --strip-components=1
 cd ${DEPS}/xml2
@@ -251,43 +258,9 @@ mkdir ${DEPS}/lcms2
 $CURL https://github.com/mm2/Little-CMS/releases/download/lcms${VERSION_LCMS2}/lcms2-${VERSION_LCMS2}.tar.gz | tar xzC ${DEPS}/lcms2 --strip-components=1
 cd ${DEPS}/lcms2
 CFLAGS="${CFLAGS} -O3" meson setup _build --default-library=static --buildtype=release --strip --prefix=${TARGET} ${MESON} \
-  -Dtests=disabled 
+  -Dtests=disabled
 meson install -C _build --tag devel
 
-mkdir ${DEPS}/aom
-$CURL https://storage.googleapis.com/aom-releases/libaom-${VERSION_AOM}.tar.gz | tar xzC ${DEPS}/aom --strip-components=1
-cd ${DEPS}/aom
-mkdir aom_build
-cd aom_build
-AOM_AS_FLAGS="${FLAGS}" cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
-  -DBUILD_SHARED_LIBS=FALSE -DENABLE_DOCS=0 -DENABLE_TESTS=0 -DENABLE_TESTDATA=0 -DENABLE_TOOLS=0 -DENABLE_EXAMPLES=0 \
-  -DCONFIG_PIC=1 -DENABLE_NASM=1 ${DARWIN_ARM:+-DCONFIG_RUNTIME_CPU_DETECT=0} \
-  -DCONFIG_AV1_HIGHBITDEPTH=0 -DCONFIG_WEBM_IO=0 \
-  ..
-make install/strip
-
-mkdir ${DEPS}/heif
-$CURL https://github.com/strukturag/libheif/releases/download/v${VERSION_HEIF}/libheif-${VERSION_HEIF}.tar.gz | tar xzC ${DEPS}/heif --strip-components=1
-cd ${DEPS}/heif
-# Downgrade minimum required CMake version to 3.12 - https://github.com/strukturag/libheif/issues/975
-sed -i'.bak' "/^cmake_minimum_required/s/3.16.3/3.12/" CMakeLists.txt
-CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DENABLE_PLUGIN_LOADING=0 -DWITH_EXAMPLES=0 -DWITH_LIBDE265=0 -DWITH_X265=0
-make install/strip
-if [ "$PLATFORM" == "linux-arm" ]; then
-  # Remove -lstdc++ from Libs.private, it won't work with -static-libstdc++
-  sed -i '/^Libs.private:/s/ -lstdc++//' ${TARGET}/lib/pkgconfig/libheif.pc
-fi
-
-mkdir ${DEPS}/jpeg
-$CURL https://github.com/mozilla/mozjpeg/archive/v${VERSION_MOZJPEG}.tar.gz | tar xzC ${DEPS}/jpeg --strip-components=1
-cd ${DEPS}/jpeg
-cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR:PATH=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
-  -DENABLE_STATIC=TRUE -DENABLE_SHARED=FALSE -DWITH_JPEG8=1 -DWITH_TURBOJPEG=FALSE -DPNG_SUPPORTED=FALSE
-make install/strip
 
 mkdir ${DEPS}/png16
 $CURL https://downloads.sourceforge.net/project/libpng/libpng16/${VERSION_PNG16}/libpng-${VERSION_PNG16}.tar.xz | tar xJC ${DEPS}/png16 --strip-components=1
@@ -316,23 +289,6 @@ cd ${DEPS}/webp
   --enable-libwebpmux --enable-libwebpdemux
 make install-strip bin_PROGRAMS= noinst_PROGRAMS= man_MANS=
 
-mkdir ${DEPS}/tiff
-$CURL https://download.osgeo.org/libtiff/tiff-${VERSION_TIFF}.tar.gz | tar xzC ${DEPS}/tiff --strip-components=1 \
-  || (echo "Failed to download libtiff, using mirror" && $CURL https://fossies.org/linux/misc/tiff-${VERSION_TIFF}.tar.gz | tar xzC ${DEPS}/tiff --strip-components=1)
-cd ${DEPS}/tiff
-# Propagate -pthread into CFLAGS to ensure WebP support
-CFLAGS="${CFLAGS} -pthread" ./configure --host=${CHOST} --prefix=${TARGET} --enable-static --disable-shared --disable-dependency-tracking \
-  --disable-tools --disable-tests --disable-contrib --disable-docs --disable-mdi --disable-pixarlog --disable-old-jpeg --disable-cxx --disable-lzma --disable-zstd --disable-libdeflate
-make install-strip noinst_PROGRAMS= dist_doc_DATA=
-
-mkdir ${DEPS}/hwy
-$CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
-cd ${DEPS}/hwy
-CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DHWY_ENABLE_CONTRIB=0 -DHWY_ENABLE_EXAMPLES=0 -DHWY_ENABLE_TESTS=0
-make install/strip
-
 build_freetype() {
   rm -rf ${DEPS}/freetype
   mkdir ${DEPS}/freetype
@@ -352,14 +308,6 @@ cd ${DEPS}/expat
   --without-libbsd --without-examples --without-tests
 make install-strip dist_cmake_DATA= nodist_cmake_DATA=
 
-mkdir ${DEPS}/archive
-$CURL https://github.com/libarchive/libarchive/releases/download/v${VERSION_ARCHIVE}/libarchive-${VERSION_ARCHIVE}.tar.xz | tar xJC ${DEPS}/archive --strip-components=1
-cd ${DEPS}/archive
-./configure --host=${CHOST} --prefix=${TARGET} --enable-static --disable-shared --disable-dependency-tracking \
-  --disable-bsdtar --disable-bsdcat --disable-bsdcpio --disable-bsdunzip --disable-posix-regex-lib --disable-xattr --disable-acl \
-  --without-bz2lib --without-libb2 --without-iconv --without-lz4 --without-zstd --without-lzma \
-  --without-lzo2 --without-cng --without-openssl --without-xml2 --without-expat
-make install-strip libarchive_man_MANS=
 
 mkdir ${DEPS}/fontconfig
 $CURL https://www.freedesktop.org/software/fontconfig/release/fontconfig-${VERSION_FONTCONFIG}.tar.xz | tar xJC ${DEPS}/fontconfig --strip-components=1
@@ -418,38 +366,32 @@ meson setup _build --default-library=static --buildtype=release --strip --prefix
   -Ddocumentation=false -Dbuild-testsuite=false -Dbuild-examples=false -Dintrospection=disabled -Dfontconfig=enabled
 meson install -C _build --tag devel
 
-mkdir ${DEPS}/rsvg
-$CURL https://download.gnome.org/sources/librsvg/$(without_patch $VERSION_RSVG)/librsvg-${VERSION_RSVG}.tar.xz | tar xJC ${DEPS}/rsvg --strip-components=1
-cd ${DEPS}/rsvg
-# Disallow GIF and WebP embedded in SVG images
-sed -i'.bak' "/image = /s/, \"gif\", \"webp\"//" rsvg/Cargo.toml
-# We build Cairo with `-Dzlib=disabled`, which implicitly disables the PDF/PostScript surface backends
-sed -i'.bak' "/cairo-rs = /s/, \"pdf\", \"ps\"//" {librsvg-c,rsvg}/Cargo.toml
-# Skip build of rsvg-convert
-sed -i'.bak' "/subdir('rsvg_convert')/d" meson.build
-# https://gitlab.gnome.org/GNOME/librsvg/-/merge_requests/1066#note_2356762
-sed -i'.bak' "/^if host_system in \['windows'/s/, 'linux'//" meson.build
-# Regenerate the lockfile after making the above changes
-cargo update --workspace
-# Remove the --static flag from the PKG_CONFIG env since Rust does not
-# parse that correctly.
-PKG_CONFIG=${PKG_CONFIG/ --static/} meson setup _build --default-library=static --buildtype=release --strip --prefix=${TARGET} ${MESON} \
-  -Dintrospection=disabled -Dpixbuf{,-loader}=disabled -Ddocs=disabled -Dvala=disabled -Dtests=false \
-  ${RUST_TARGET:+-Dtriplet=$RUST_TARGET}
-meson install -C _build --tag devel
+# mkdir ${DEPS}/rsvg
+# $CURL https://download.gnome.org/sources/librsvg/$(without_patch $VERSION_RSVG)/librsvg-${VERSION_RSVG}.tar.xz | tar xJC ${DEPS}/rsvg --strip-components=1
+# cd ${DEPS}/rsvg
+# # Disallow GIF and WebP embedded in SVG images
+# sed -i'.bak' "/image = /s/, \"gif\", \"webp\"//" rsvg/Cargo.toml
+# # We build Cairo with `-Dzlib=disabled`, which implicitly disables the PDF/PostScript surface backends
+# sed -i'.bak' "/cairo-rs = /s/, \"pdf\", \"ps\"//" {librsvg-c,rsvg}/Cargo.toml
+# # Skip build of rsvg-convert
+# sed -i'.bak' "/subdir('rsvg_convert')/d" meson.build
+# # https://gitlab.gnome.org/GNOME/librsvg/-/merge_requests/1066#note_2356762
+# sed -i'.bak' "/^if host_system in \['windows'/s/, 'linux'//" meson.build
+# # Regenerate the lockfile after making the above changes
+# cargo update --workspace
+# # Remove the --static flag from the PKG_CONFIG env since Rust does not
+# # parse that correctly.
+# PKG_CONFIG=${PKG_CONFIG/ --static/} meson setup _build --default-library=static --buildtype=release --strip --prefix=${TARGET} ${MESON} \
+#   -Dintrospection=disabled -Dpixbuf{,-loader}=disabled -Ddocs=disabled -Dvala=disabled -Dtests=false \
+#   ${RUST_TARGET:+-Dtriplet=$RUST_TARGET}
+# meson install -C _build --tag devel
 
-mkdir ${DEPS}/cgif
-$CURL https://github.com/dloebl/cgif/archive/v${VERSION_CGIF}.tar.gz | tar xzC ${DEPS}/cgif --strip-components=1
-cd ${DEPS}/cgif
-CFLAGS="${CFLAGS} -O3" meson setup _build --default-library=static --buildtype=release --strip --prefix=${TARGET} ${MESON} \
-  -Dexamples=false -Dtests=false
-meson install -C _build --tag devel
 
 mkdir ${DEPS}/vips
 $CURL https://github.com/libvips/libvips/releases/download/v${VERSION_VIPS}/vips-${VERSION_VIPS}.tar.xz | tar xJC ${DEPS}/vips --strip-components=1
 cd ${DEPS}/vips
-# Disable HBR support in heifsave
-$CURL https://github.com/libvips/build-win64-mxe/raw/v${VERSION_VIPS}/build/patches/vips-8-heifsave-disable-hbr-support.patch | patch -p1
+curl -Ls https://github.com/libvips/libvips/compare/v${VERSION_VIPS}...kleisauke:wasm-vips-${VERSION_VIPS}.patch | patch -p1
+
 if [ "$LINUX" = true ]; then
   # Ensure symbols from external libs (except for libglib-2.0.a and libgobject-2.0.a) are not exposed
   EXCLUDE_LIBS=$(find ${TARGET}/lib -maxdepth 1 -name '*.a' ! -name 'libglib-2.0.a' ! -name 'libgobject-2.0.a' -printf "-Wl,--exclude-libs=%f ")
@@ -458,15 +400,15 @@ if [ "$LINUX" = true ]; then
   # See: https://github.com/lovell/sharp/issues/2535#issuecomment-766400693
   printf "{local:g_param_spec_types;};" > vips.map
 fi
-# Disable building man pages, gettext po files, tools, and (fuzz-)tests
 sed -i'.bak' "/subdir('man')/{N;N;N;N;d;}" meson.build
+echo "subdir('tools')" >> meson.build
 CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" meson setup _build --default-library=shared --buildtype=release --strip --prefix=${TARGET} ${MESON} \
   -Ddeprecated=false -Dexamples=false -Dintrospection=disabled -Dmodules=disabled -Dcfitsio=disabled -Dfftw=disabled -Djpeg-xl=disabled \
   -Dmagick=disabled -Dmatio=disabled -Dnifti=disabled -Dopenexr=disabled -Dopenjpeg=disabled -Dopenslide=disabled \
-  -Dpdfium=disabled -Dpoppler=disabled -Dquantizr=disabled \
-  -Dppm=false -Danalyze=false -Dradiance=false \
+  -Dpdfium=enabled -Dpoppler=disabled -Dquantizr=disabled \
+  -Dppm=false -Danalyze=false -Dheif=disabled -Dradiance=false -Dtiff=disabled -Dcgif=disabled -Dnsgif=false -Darchive=disabled -Dresvg=enabled  \
   ${LINUX:+-Dcpp_link_args="$LDFLAGS -Wl,-Bsymbolic-functions -Wl,--version-script=$DEPS/vips/vips.map $EXCLUDE_LIBS"}
-meson install -C _build --tag runtime,devel
+meson install -C _build
 
 # Cleanup
 rm -rf ${TARGET}/lib/{pkgconfig,.libs,*.la,cmake}
@@ -534,10 +476,7 @@ copydeps ${VIPS_CPP_DEP} ${TARGET}/lib-filtered
 # Create JSON file of version numbers
 cd ${TARGET}
 printf "{\n\
-  \"aom\": \"${VERSION_AOM}\",\n\
-  \"archive\": \"${VERSION_ARCHIVE}\",\n\
   \"cairo\": \"${VERSION_CAIRO}\",\n\
-  \"cgif\": \"${VERSION_CGIF}\",\n\
   \"exif\": \"${VERSION_EXIF}\",\n\
   \"expat\": \"${VERSION_EXPAT}\",\n\
   \"ffi\": \"${VERSION_FFI}\",\n\
@@ -546,21 +485,19 @@ printf "{\n\
   \"fribidi\": \"${VERSION_FRIBIDI}\",\n\
   \"glib\": \"${VERSION_GLIB}\",\n\
   \"harfbuzz\": \"${VERSION_HARFBUZZ}\",\n\
-  \"heif\": \"${VERSION_HEIF}\",\n\
   \"highway\": \"${VERSION_HWY}\",\n\
   \"imagequant\": \"${VERSION_IMAGEQUANT}\",\n\
   \"lcms\": \"${VERSION_LCMS2}\",\n\
-  \"mozjpeg\": \"${VERSION_MOZJPEG}\",\n\
   \"pango\": \"${VERSION_PANGO}\",\n\
   \"pixman\": \"${VERSION_PIXMAN}\",\n\
   \"png\": \"${VERSION_PNG16}\",\n\
   \"proxy-libintl\": \"${VERSION_PROXY_LIBINTL}\",\n\
-  \"rsvg\": \"${VERSION_RSVG}\",\n\
   \"spng\": \"${VERSION_SPNG}\",\n\
-  \"tiff\": \"${VERSION_TIFF}\",\n\
   \"vips\": \"${VERSION_VIPS}\",\n\
   \"webp\": \"${VERSION_WEBP}\",\n\
   \"xml\": \"${VERSION_XML2}\",\n\
+  \"resvg\": \"${VERSION_RESVG}\",\n\
+  \"pdfium\": \"${VERSION_PDFIUM}\",\n\
   \"zlib-ng\": \"${VERSION_ZLIB_NG}\"\n\
 }" >versions.json
 

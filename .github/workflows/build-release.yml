@@ -1,111 +1,73 @@
 name: Build Release
 on:
-  - push
-  - pull_request
+  workflow_dispatch:
 permissions: {}
 jobs:
-  create-release:
-    permissions:
-      contents: write
-    runs-on: 'ubuntu-24.04'
-    outputs:
-      upload_url: ${{ steps.create-release.outputs.upload_url }}
-    steps:
-      - name: Create Release
-        id: create-release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@v1
-        with:
-          omitBody: true
-          prerelease: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-  build:
+  init:
     permissions:
       contents: write
     runs-on: ${{ matrix.os }}
-    needs: create-release
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os:
-          - 'ubuntu-24.04'
+          - 'macos-15'
         platform:
-          - 'linux-x64'
-          - 'linux-arm'
-          - 'linux-musl-x64'
-          - 'linux-musl-arm64'
-          - 'win-x64'
-          - 'win-x64.net452'
-          - 'win-x86'
-          - 'win-x86.net452'
-          - 'win-arm64'
-        include:
-          - os: macos-13
-            platform: 'osx-x64'
-          - os: macos-13
-            platform: 'osx-arm64'
+          - 'osx-arm64'
+    outputs:
+      cache-key: ${{ runner.os }}-cargo-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Download previously built Docker image
-        id: fetch-docker
-        if: startsWith(matrix.platform, 'linux')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Fetching artifacts from another pipeline, or even a different run of the same pipeline,
-        # is currently not well-supported in GitHub Actions. We must use the GitHub REST API to
-        # download the last successful uploaded artifact.
-        run: |
-          gh api repos/:owner/:repo/actions/artifacts \
-            -q 'first(.artifacts|.[]|select(.name=="docker-${{ matrix.platform }}" and .expired==false)|.archive_download_url)' \
-            | xargs gh api > tmp.zip || exit 0
-          unzip tmp.zip
-          rm tmp.zip
-          echo "docker_file_name=docker-${{ matrix.platform }}.tar.gz" >> $GITHUB_OUTPUT
-      - name: Load relevant image locally
-        if: steps.fetch-docker.outputs.docker_file_name != ''
-        run: docker load -i ${{ steps.fetch-docker.outputs.docker_file_name }} || echo "Could not load Docker image"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ~/.cargo/
+            deps/cargo
+            deps/rustup
+          key: ${{ runner.os }}-cargo-
+      - name: init.sh
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./build/init.sh ${{ matrix.platform }}
+
+  build:
+    permissions:
+      contents: write
+    needs: init
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - 'macos-15'
+        platform:
+          - 'osx-arm64'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/
+            deps/cargo
+            deps/rustup
+          key: ${{ needs.init.outputs.cache-key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
       - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
         run: |
-          pip3 install meson ninja packaging
+          pip3 install meson ninja packaging --break-system-packages
           brew install automake nasm
       - name: Build ${{ matrix.platform }}
         id: build-release
         run: ./build.sh $(cat LIBVIPS_VERSION) ${{ matrix.platform }}
-      - name: Generate integrity checksums
-        id: integrity
-        run: ./integrity.sh
-      - name: Upload Release Asset (.tar.gz)
-        id: upload-release-asset-gz
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: true
-          artifacts: libvips-*-${{ matrix.platform }}.tar.gz
-          artifactContentType: application/gzip
-          omitBodyDuringUpdate: true
-          omitNameDuringUpdate: true
-          prerelease: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload Release Asset (.integrity)
-        id: upload-release-asset-integrity
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: true
-          artifacts: "*.integrity"
-          artifactContentType: text/plain
-          omitBodyDuringUpdate: true
-          omitNameDuringUpdate: true
-          prerelease: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Save Docker image
-        if: startsWith(matrix.platform, 'linux')
-        run: docker save vips-dev-${{ matrix.platform }}:latest | gzip > docker-${{ matrix.platform }}.tar.gz
-      - name: Upload Docker image as build artifact
-        if: startsWith(matrix.platform, 'linux')
+        env:
+          VERSION_LATEST_REQUIRED: "false"
+      - name: "Upload Artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: docker-${{ matrix.platform }}
-          path: docker-${{ matrix.platform }}.tar.gz
+          name: libvips-8.16.1-${{ matrix.platform }}.tar.gz
+          path: |
+            target/
+          if-no-files-found: error

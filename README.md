@@ -1,3 +1,5 @@
+specially modified for mac arm64 with resvg, libpdfium and jpegli
+
 # Packaging scripts
 
 libvips and its dependencies are provided as pre-compiled shared libraries
