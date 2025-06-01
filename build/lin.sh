@@ -155,7 +155,7 @@ rm -fr third_party/highway
 cp -r ${DEPS}/hwy third_party/highway
 sed -i'.bak' 's@ AND NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN@@g' lib/jpegli.cmake
 sed -i'.bak' "/set_property(TARGET jpeg APPEND_STRING PROPERTY/{N;d;}" lib/jpegli.cmake
-sed -i'.bak' '@JPEGLI_ERROR("DHT marker: no Huffman table found")@return@g' lib/jpegli/decode_marker.cc
+sed -i'.bak' 's@JPEGLI_ERROR("DHT marker: no Huffman table found")@return@g' lib/jpegli/decode_marker.cc
 cat lib/jpegli/decode_marker.cc
 CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -B_build -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DBUILD_SHARED_LIBS=0 -DJPEGXL_ENABLE_JPEGLI=1 -DCMAKE_BUILD_TYPE=Release  -DJPEGXL_ENABLE_FUZZERS=0 -DJPEGXL_ENABLE_DEVTOOLS=0 -DJPEGXL_ENABLE_TOOLS=0 -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=1 -DJPEGXL_ENABLE_DOXYGEN=0 -DJPEGXL_ENABLE_MANPAGES=0 -DJPEGXL_ENABLE_BENCHMARK=0 -DJPEGXL_BUNDLE_LIBPNG=0 -DJPEGXL_ENABLE_JNI=0 -DJPEGXL_ENABLE_SJPEG=0 -DJPEGXL_ENABLE_OPENEXR=0 -DJPEGXL_ENABLE_SKCMS=1 -DJPEGXL_ENABLE_TCMALLOC=0 -DJPEGXL_ENABLE_COVERAGE=0 -DJPEGXL_ENABLE_WASM_THREADS=0 -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX=target/
 make -C _build
