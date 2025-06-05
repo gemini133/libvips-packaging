@@ -390,9 +390,8 @@ meson install -C _build --tag devel
 
 
 mkdir ${DEPS}/vips
-$CURL https://github.com/libvips/libvips/releases/download/v${VERSION_VIPS}/vips-${VERSION_VIPS}.tar.xz | tar xJC ${DEPS}/vips --strip-components=1
+git clone https://github.com/gemini133/libvips -b resvg vips
 cd ${DEPS}/vips
-curl -Ls https://github.com/libvips/libvips/compare/v${VERSION_VIPS}...kleisauke:wasm-vips-${VERSION_VIPS}.patch | patch -p1
 
 if [ "$LINUX" = true ]; then
   # Ensure symbols from external libs (except for libglib-2.0.a and libgobject-2.0.a) are not exposed
