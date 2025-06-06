@@ -390,8 +390,8 @@ meson install -C _build --tag devel
 
 
 mkdir ${DEPS}/vips
-git clone https://github.com/gemini133/libvips -b resvg vips
 cd ${DEPS}/vips
+git clone https://github.com/gemini133/libvips -b resvg .
 
 if [ "$LINUX" = true ]; then
   # Ensure symbols from external libs (except for libglib-2.0.a and libgobject-2.0.a) are not exposed
