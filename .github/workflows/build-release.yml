@@ -74,7 +74,7 @@ jobs:
             ~/.cargo/
             deps/cargo
             deps/rustup
-          key: ${{ needs.init.outputs.cache-key }}
+          key: ${{ needs.macos-init.outputs.cache-key }}
           enableCrossOsArchive: true
           fail-on-cache-miss: true
       - name: Install dependencies (macOS)
