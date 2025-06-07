@@ -147,6 +147,16 @@ if [ "$DARWIN" = true ]; then
 sudo chown -R runner:admin /usr/local/share/
 fi
 
+mkdir -p ${DEPS}/resvg
+curl -Ls https://github.com/linebender/resvg/releases/download/v$VERSION_RESVG/resvg-$VERSION_RESVG.tar.xz | tar xJC ${DEPS}/resvg --strip-components=1
+cd ${DEPS}/resvg
+# We don't want to build the shared library
+sed -i'.bak' '/^crate-type =/s/"cdylib", //' crates/c-api/Cargo.toml
+cargo build --manifest-path=crates/c-api/Cargo.toml --release
+ls -la target/release
+cp target/release/libresvg* ${TARGET}/lib/
+cp crates/c-api/resvg.h ${TARGET}/include/
+
 mkdir -p ${DEPS}/hwy
 $CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
 
@@ -185,15 +195,6 @@ CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
   -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DHWY_ENABLE_CONTRIB=0 -DHWY_ENABLE_EXAMPLES=0 -DHWY_ENABLE_TESTS=0
 make install/strip
 
-mkdir -p ${DEPS}/resvg
-curl -Ls https://github.com/linebender/resvg/releases/download/v$VERSION_RESVG/resvg-$VERSION_RESVG.tar.xz | tar xJC ${DEPS}/resvg --strip-components=1
-cd ${DEPS}/resvg
-# We don't want to build the shared library
-sed -i'.bak' '/^crate-type =/s/"cdylib", //' crates/c-api/Cargo.toml
-cargo build --manifest-path=crates/c-api/Cargo.toml --release
-ls -la target/release
-cp target/release/libresvg* ${TARGET}/lib/
-cp crates/c-api/resvg.h ${TARGET}/include/
 
 mkdir ${DEPS}/pdfium
 $CURL https://github.com/gemini133/pdfium-lib/releases/download/${VERSION_PDFIUM}/macos.tgz | tar xzC ${TARGET} --strip-components 1
