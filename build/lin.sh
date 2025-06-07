@@ -191,8 +191,8 @@ cd ${DEPS}/resvg
 # We don't want to build the shared library
 sed -i'.bak' '/^crate-type =/s/"cdylib", //' crates/c-api/Cargo.toml
 cargo build --manifest-path=crates/c-api/Cargo.toml --release
-ls -la target/
-cp target/aarch64-apple-darwin/release/libresvg* ${TARGET}/lib/
+ls -la target/release
+cp target/release/libresvg* ${TARGET}/lib/
 cp crates/c-api/resvg.h ${TARGET}/include/
 
 mkdir ${DEPS}/pdfium
