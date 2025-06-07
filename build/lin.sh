@@ -143,7 +143,9 @@ if [ "${PLATFORM%-*}" == "linux-musl" ] || [ "$DARWIN" = true ]; then
   meson install -C _build --tag devel
 fi
 
+if [ "$DARWIN" = true ]; then
 sudo chown -R runner:admin /usr/local/share/
+fi
 
 mkdir -p ${DEPS}/hwy
 $CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
@@ -473,44 +475,44 @@ copydeps ${VIPS_CPP_DEP} ${TARGET}/lib-filtered
 
 # Create JSON file of version numbers
 cd ${TARGET}
-printf "{\n\
-  \"cairo\": \"${VERSION_CAIRO}\",\n\
-  \"exif\": \"${VERSION_EXIF}\",\n\
-  \"expat\": \"${VERSION_EXPAT}\",\n\
-  \"ffi\": \"${VERSION_FFI}\",\n\
-  \"fontconfig\": \"${VERSION_FONTCONFIG}\",\n\
-  \"freetype\": \"${VERSION_FREETYPE}\",\n\
-  \"fribidi\": \"${VERSION_FRIBIDI}\",\n\
-  \"glib\": \"${VERSION_GLIB}\",\n\
-  \"harfbuzz\": \"${VERSION_HARFBUZZ}\",\n\
-  \"highway\": \"${VERSION_HWY}\",\n\
-  \"imagequant\": \"${VERSION_IMAGEQUANT}\",\n\
-  \"lcms\": \"${VERSION_LCMS2}\",\n\
-  \"pango\": \"${VERSION_PANGO}\",\n\
-  \"pixman\": \"${VERSION_PIXMAN}\",\n\
-  \"png\": \"${VERSION_PNG16}\",\n\
-  \"proxy-libintl\": \"${VERSION_PROXY_LIBINTL}\",\n\
-  \"spng\": \"${VERSION_SPNG}\",\n\
-  \"vips\": \"${VERSION_VIPS}\",\n\
-  \"webp\": \"${VERSION_WEBP}\",\n\
-  \"xml\": \"${VERSION_XML2}\",\n\
-  \"resvg\": \"${VERSION_RESVG}\",\n\
-  \"pdfium\": \"${VERSION_PDFIUM}\",\n\
-  \"zlib-ng\": \"${VERSION_ZLIB_NG}\"\n\
-}" >versions.json
+# printf "{\n\
+#   \"cairo\": \"${VERSION_CAIRO}\",\n\
+#   \"exif\": \"${VERSION_EXIF}\",\n\
+#   \"expat\": \"${VERSION_EXPAT}\",\n\
+#   \"ffi\": \"${VERSION_FFI}\",\n\
+#   \"fontconfig\": \"${VERSION_FONTCONFIG}\",\n\
+#   \"freetype\": \"${VERSION_FREETYPE}\",\n\
+#   \"fribidi\": \"${VERSION_FRIBIDI}\",\n\
+#   \"glib\": \"${VERSION_GLIB}\",\n\
+#   \"harfbuzz\": \"${VERSION_HARFBUZZ}\",\n\
+#   \"highway\": \"${VERSION_HWY}\",\n\
+#   \"imagequant\": \"${VERSION_IMAGEQUANT}\",\n\
+#   \"lcms\": \"${VERSION_LCMS2}\",\n\
+#   \"pango\": \"${VERSION_PANGO}\",\n\
+#   \"pixman\": \"${VERSION_PIXMAN}\",\n\
+#   \"png\": \"${VERSION_PNG16}\",\n\
+#   \"proxy-libintl\": \"${VERSION_PROXY_LIBINTL}\",\n\
+#   \"spng\": \"${VERSION_SPNG}\",\n\
+#   \"vips\": \"${VERSION_VIPS}\",\n\
+#   \"webp\": \"${VERSION_WEBP}\",\n\
+#   \"xml\": \"${VERSION_XML2}\",\n\
+#   \"resvg\": \"${VERSION_RESVG}\",\n\
+#   \"pdfium\": \"${VERSION_PDFIUM}\",\n\
+#   \"zlib-ng\": \"${VERSION_ZLIB_NG}\"\n\
+# }" >versions.json
 
-# Add third-party notices
-$CURL -O https://raw.githubusercontent.com/kleisauke/libvips-packaging/main/THIRD-PARTY-NOTICES.md
+# # Add third-party notices
+# $CURL -O https://raw.githubusercontent.com/kleisauke/libvips-packaging/main/THIRD-PARTY-NOTICES.md
 
 # Create the tarball
 ls -al lib
 rm -rf lib
 mv lib-filtered lib
-tar chzf ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz \
-  include \
-  lib \
-  versions.json \
-  THIRD-PARTY-NOTICES.md
+# tar chzf ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz \
+#   include \
+#   lib \
+#   versions.json \
+#   THIRD-PARTY-NOTICES.md
 
-# Allow tarballs to be read outside container
-chmod 644 ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz
+# # Allow tarballs to be read outside container
+# chmod 644 ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 permissions: {}
 jobs:
-  init:
+  macos-init:
     permissions:
       contents: write
     runs-on: ${{ matrix.os }}
@@ -30,11 +30,33 @@ jobs:
       - name: init.sh
         if: steps.cache.outputs.cache-hit != 'true'
         run: ./build/init.sh ${{ matrix.platform }}
-
-  build:
+  linux-build:
     permissions:
       contents: write
-    needs: init
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - 'ubuntu-24.04'
+        platform:
+          - 'osx-arm64'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build ${{ matrix.platform }}
+        run: ./build.sh ${{ matrix.platform }}
+      - name: "Upload Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvips-${{ matrix.platform }}.tar.gz
+          path: |
+            target/
+          if-no-files-found: error
+  macos-build:
+    permissions:
+      contents: write
+    needs: macos-init
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -60,14 +82,11 @@ jobs:
           pip3 install meson ninja packaging --break-system-packages
           brew install automake nasm
       - name: Build ${{ matrix.platform }}
-        id: build-release
-        run: ./build.sh $(cat LIBVIPS_VERSION) ${{ matrix.platform }}
-        env:
-          VERSION_LATEST_REQUIRED: "false"
+        run: ./build.sh ${{ matrix.platform }}
       - name: "Upload Artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: libvips-8.16.1-${{ matrix.platform }}.tar.gz
+          name: libvips-${{ matrix.platform }}.tar.gz
           path: |
             target/
           if-no-files-found: error
