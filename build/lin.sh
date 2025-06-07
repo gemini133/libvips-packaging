@@ -147,6 +147,8 @@ if [ "$DARWIN" = true ]; then
 sudo chown -R runner:admin /usr/local/share/
 fi
 
+mkdir -p ${TARGET}/lib/ ${TARGET}/include/
+
 mkdir -p ${DEPS}/resvg
 curl -Ls https://github.com/linebender/resvg/releases/download/v$VERSION_RESVG/resvg-$VERSION_RESVG.tar.xz | tar xJC ${DEPS}/resvg --strip-components=1
 cd ${DEPS}/resvg
