@@ -190,9 +190,7 @@ curl -Ls https://github.com/linebender/resvg/releases/download/v$VERSION_RESVG/r
 cd ${DEPS}/resvg
 # We don't want to build the shared library
 sed -i'.bak' '/^crate-type =/s/"cdylib", //' crates/c-api/Cargo.toml
-cargo build --manifest-path=crates/c-api/Cargo.toml --release --target aarch64-apple-darwin
-ls -la target/release/
-ls -la target/aarch64-apple-darwin/release/
+cargo build --manifest-path=crates/c-api/Cargo.toml --release
 cp target/aarch64-apple-darwin/release/libresvg* ${TARGET}/lib/
 cp crates/c-api/resvg.h ${TARGET}/include/
 
