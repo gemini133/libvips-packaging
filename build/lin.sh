@@ -506,11 +506,11 @@ $CURL -O https://raw.githubusercontent.com/kleisauke/libvips-packaging/main/THIR
 ls -al lib
 rm -rf lib
 mv lib-filtered lib
-tar chzf ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz \
-  include \
-  lib \
-  versions.json \
-  THIRD-PARTY-NOTICES.md
+# tar chzf ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz \
+#   include \
+#   lib \
+#   versions.json \
+#   THIRD-PARTY-NOTICES.md
 
-# Allow tarballs to be read outside container
-chmod 644 ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz
+# # Allow tarballs to be read outside container
+# chmod 644 ${PACKAGE}/libvips-${VERSION_VIPS}-${PLATFORM}.tar.gz

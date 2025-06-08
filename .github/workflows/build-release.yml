@@ -67,7 +67,7 @@ jobs:
       - name: "Upload Artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: libvips-8.16.1-${{ matrix.platform }}.tar.gz
+          name: libvips-${{ matrix.platform }}
           path: |
             target/
           if-no-files-found: error
