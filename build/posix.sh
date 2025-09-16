@@ -207,15 +207,54 @@ if [ "$PLATFORM" == "linux-arm" ]; then
   sed -i '/^Libs.private:/s/ -lstdc++//' ${TARGET}/lib/pkgconfig/libheif.pc
 fi
 
-mkdir ${DEPS}/jpeg
-$CURL https://github.com/mozilla/mozjpeg/archive/v${VERSION_MOZJPEG}.tar.gz | tar xzC ${DEPS}/jpeg --strip-components=1
-cd ${DEPS}/jpeg
-# [PATCH] BUILD: Silence CMake 3.28.x deprecation warning
-$CURL https://github.com/mozilla/mozjpeg/commit/1644bdb7d2fac66cd0ce25adef7754e008b5bc1e.patch | patch -p1
-cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR:PATH=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
-  -DENABLE_STATIC=TRUE -DENABLE_SHARED=FALSE -DWITH_JPEG8=1 -DWITH_TURBOJPEG=FALSE -DPNG_SUPPORTED=FALSE
+mkdir ${DEPS}/hwy
+$CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
+cd ${DEPS}/hwy
+# [PATCH] workaround for inadvertent SVE codegen on GCC<14
+$CURL https://github.com/google/highway/commit/ad48f2bf298bac247288c8399a5c0e9a40ed8246.patch | patch -p1
+CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
+  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DHWY_ENABLE_CONTRIB=0 -DHWY_ENABLE_EXAMPLES=0 -DHWY_ENABLE_TESTS=0
 make install/strip
+
+mkdir -p ${DEPS}/jpegli
+cd ${DEPS}/jpegli
+git clone https://github.com/gemini133/jpegli.git -b private .
+./deps.sh
+rm -fr third_party/highway
+cp -r ${DEPS}/hwy third_party/highway
+CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -B_build -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DBUILD_SHARED_LIBS=0 -DJPEGXL_ENABLE_JPEGLI=1 -DCMAKE_BUILD_TYPE=Release  -DJPEGXL_ENABLE_FUZZERS=0 -DJPEGXL_ENABLE_DEVTOOLS=0 -DJPEGXL_ENABLE_TOOLS=0 -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=1 -DJPEGXL_ENABLE_DOXYGEN=0 -DJPEGXL_ENABLE_MANPAGES=0 -DJPEGXL_ENABLE_BENCHMARK=0 -DJPEGXL_BUNDLE_LIBPNG=0 -DJPEGXL_ENABLE_JNI=0 -DJPEGXL_ENABLE_SJPEG=0 -DJPEGXL_ENABLE_OPENEXR=0 -DJPEGXL_ENABLE_SKCMS=1 -DJPEGXL_ENABLE_TCMALLOC=0 -DJPEGXL_ENABLE_COVERAGE=0 -DJPEGXL_ENABLE_WASM_THREADS=0 -DBUILD_TESTING=0 -DCMAKE_INSTALL_PREFIX=target/
+make -C _build
+#combine libjpeg_wrapper.o into libjpegli-static.a
+ar rcs _build/lib/libjpegli-static.a _build/lib/CMakeFiles/jpegli-libjpeg-obj.dir/jpegli/libjpeg_wrapper.cc.o
+mkdir -p ${TARGET}/lib/
+cp _build/lib/libjpegli-static.a ${TARGET}/lib/libjpeg.a
+mkdir -p ${TARGET}/include/
+cp _build/lib/include/jpegli/*h ${TARGET}/include/
+cp third_party/libjpeg-turbo/jerror.h ${TARGET}/include/
+mkdir -p ${TARGET}/lib/pkgconfig/
+cat > ${TARGET}/lib/pkgconfig/libjpeg.pc << EOF
+prefix=${TARGET}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+Name: libjpeg
+Description: libjpeg
+Version: 1.0
+Requires:
+Libs: -L\${libdir} -ljpeg
+Cflags: -I\${includedir}
+EOF
+
+#mkdir ${DEPS}/jpeg
+#$CURL https://github.com/mozilla/mozjpeg/archive/v${VERSION_MOZJPEG}.tar.gz | tar xzC ${DEPS}/jpeg --strip-components=1
+#cd ${DEPS}/jpeg
+# [PATCH] BUILD: Silence CMake 3.28.x deprecation warning
+#$CURL https://github.com/mozilla/mozjpeg/commit/1644bdb7d2fac66cd0ce25adef7754e008b5bc1e.patch | patch -p1
+#cmake -G"Unix Makefiles" \
+#  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR:PATH=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
+#  -DENABLE_STATIC=TRUE -DENABLE_SHARED=FALSE -DWITH_JPEG8=1 -DWITH_TURBOJPEG=FALSE -DPNG_SUPPORTED=FALSE
+#make install/strip
 
 mkdir ${DEPS}/png
 $CURL https://github.com/pnggroup/libpng/archive/v${VERSION_PNG}.tar.gz | tar xzC ${DEPS}/png --strip-components=1
@@ -251,16 +290,6 @@ cd ${DEPS}/tiff
 CFLAGS="${CFLAGS} -pthread" ./configure --host=${CHOST} --prefix=${TARGET} --enable-static --disable-shared --disable-dependency-tracking \
   --disable-tools --disable-tests --disable-contrib --disable-docs --disable-mdi --disable-pixarlog --disable-old-jpeg --disable-cxx --disable-lzma --disable-zstd --disable-libdeflate
 make install-strip noinst_PROGRAMS= dist_doc_DATA=
-
-mkdir ${DEPS}/hwy
-$CURL https://github.com/google/highway/archive/${VERSION_HWY}.tar.gz | tar xzC ${DEPS}/hwy --strip-components=1
-cd ${DEPS}/hwy
-# [PATCH] workaround for inadvertent SVE codegen on GCC<14
-$CURL https://github.com/google/highway/commit/ad48f2bf298bac247288c8399a5c0e9a40ed8246.patch | patch -p1
-CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" cmake -G"Unix Makefiles" \
-  -DCMAKE_TOOLCHAIN_FILE=${ROOT}/Toolchain.cmake -DCMAKE_INSTALL_PREFIX=${TARGET} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=0 -DHWY_ENABLE_CONTRIB=0 -DHWY_ENABLE_EXAMPLES=0 -DHWY_ENABLE_TESTS=0
-make install/strip
 
 build_freetype() {
   rm -rf ${DEPS}/freetype
