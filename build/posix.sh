@@ -403,7 +403,7 @@ make install/strip
 
 
 mkdir ${DEPS}/pdfium
-$CURL https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${VERSION_PDFIUM}/pdfium-$(echo "$PLATFORM" | sed -E 's/musl/-musl/g; s/v[6-8]//g; s/darwin/mac/g; s/osx-//g').tgz | tar xzC ${TARGET}
+$CURL https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${VERSION_PDFIUM}/pdfium-$(echo "$PLATFORM" | sed -E 's/musl/-musl/g; s/v[6-8]//g; s/darwin/mac/g; s/osx-/mac-/g').tgz | tar xzC ${TARGET}
 cd ${DEPS}/pdfium
 
 mkdir -p ${TARGET}/lib/pkgconfig
